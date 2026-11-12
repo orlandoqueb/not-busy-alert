@@ -157,7 +157,8 @@ function Stepper(props: {
 }
 
 function fmtHour(h: number) {
-  if (h === 0 || h === 24) return '12 AM';
+  if (h === 24) return 'Midnight';
+  if (h === 0) return '12 AM';
   if (h === 12) return '12 PM';
   return h < 12 ? `${h} AM` : `${h - 12} PM`;
 }

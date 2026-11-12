@@ -5,10 +5,11 @@ import { supabase } from './supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Google sign-in through Supabase Auth.
-// The redirect URL printed by getRedirectUrl() must be added in
+// Where Supabase sends people back after Google sign-in, email confirmation
+// or a password reset link. Add these URLs in
 // Supabase > Authentication > URL Configuration > Redirect URLs.
 export function getRedirectUrl() {
+  if (Platform.OS === 'web') return window.location.origin;
   return makeRedirectUri({ scheme: 'notbusyalert', path: 'auth-callback' });
 }
 
@@ -17,7 +18,7 @@ export async function signInWithGoogle() {
     // Full-page redirect; Supabase picks the session up from the URL on return.
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: getRedirectUrl() },
     });
     if (error) throw error;
     return;
@@ -31,12 +32,50 @@ export async function signInWithGoogle() {
   if (error) throw error;
 
   const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-  if (result.type !== 'success') return;
+  if (result.type === 'success') await handleAuthRedirect(result.url);
+}
 
-  const code = new URL(result.url).searchParams.get('code');
-  if (!code) throw new Error('Sign-in did not return a code');
-  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-  if (exchangeError) throw exchangeError;
+// Email + password. Returns 'confirm' when the user must click the link in
+// the confirmation email before they can sign in.
+export async function signUpWithEmail(email: string, password: string): Promise<'signed-in' | 'confirm'> {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: getRedirectUrl() },
+  });
+  if (error) throw error;
+  // Supabase hides whether the email exists; an existing user comes back with no identities.
+  if (data.user && data.user.identities?.length === 0) throw new Error('User already registered');
+  return data.session ? 'signed-in' : 'confirm';
+}
+
+export async function signInWithEmail(email: string, password: string) {
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+}
+
+export async function sendPasswordReset(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: getRedirectUrl() });
+  if (error) throw error;
+}
+
+export async function updatePassword(password: string) {
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
+}
+
+// Phones: links from emails and Google open the app at notbusyalert://auth-callback?code=...
+// Exchanging the code signs the user in (and fires PASSWORD_RECOVERY for reset links).
+export async function handleAuthRedirect(url: string) {
+  let code: string | null = null;
+  try {
+    code = new URL(url).searchParams.get('code');
+  } catch {
+    return;
+  }
+  if (!code) return;
+  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  if (error) throw error;
 }
 
 export function signOut() {

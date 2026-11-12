@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { BusynessChart } from '../components/BusynessChart';
+import { busyLabel, Strings, useI18n } from '../i18n';
 import { placeDetails } from '../lib/places';
-import { registerForPush } from '../lib/push';
+import { PushProblem, registerForPush } from '../lib/push';
 import { Favorite, Place, supabase } from '../lib/supabase';
 import { busynessColor, colors, localDayHour } from '../theme';
 
 type Props = { placeId: string; sessionToken?: string; userId: string; onBack: () => void };
-const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export function PlaceScreen({ placeId, sessionToken, userId, onBack }: Props) {
+  const { t, lang } = useI18n();
   const [place, setPlace] = useState<Place | null>(null);
   const [fav, setFav] = useState<Favorite | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<PushProblem | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export function PlaceScreen({ placeId, sessionToken, userId, onBack }: Props) {
     setSaving(false);
     if (error) return setError(error.message);
     setFav(data as Favorite);
-    setNotice(await registerForPush(userId));
+    setNotice(await registerForPush(userId, lang));
   }
 
   async function removeFavorite() {
@@ -61,7 +62,7 @@ export function PlaceScreen({ placeId, sessionToken, userId, onBack }: Props) {
   if (error) {
     return (
       <View style={styles.wrap}>
-        <Pressable onPress={onBack}><Text style={styles.link}>‹ Back</Text></Pressable>
+        <Pressable onPress={onBack}><Text style={styles.link}>{t.back}</Text></Pressable>
         <Text style={styles.error}>{error}</Text>
       </View>
     );
@@ -71,43 +72,44 @@ export function PlaceScreen({ placeId, sessionToken, userId, onBack }: Props) {
   }
 
   const { day, hour } = localDayHour(place.timezone);
+  const pct = lang === 'fr' ? ' %' : '%';
 
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={{ paddingBottom: 48 }}>
-      <Pressable onPress={onBack}><Text style={styles.link}>‹ Back</Text></Pressable>
+      <Pressable onPress={onBack}><Text style={styles.link}>{t.back}</Text></Pressable>
       <Text style={styles.title}>{place.name}</Text>
       {place.address && <Text style={styles.sub}>{place.address}</Text>}
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Popular times</Text>
+        <Text style={styles.cardTitle}>{t.popularTimes}</Text>
         {place.live_busyness != null ? (
           <Text style={[styles.live, { color: busynessColor(place.live_busyness) }]}>
-            ● Live: {place.live_label ?? `${place.live_busyness}% busy`}
+            ● {t.live} · {busyLabel(t, place.live_busyness)} ({place.live_busyness}{pct})
           </Text>
         ) : (
-          <Text style={styles.sub}>No live data right now.</Text>
+          <Text style={styles.sub}>{t.noLive}</Text>
         )}
         <BusynessChart usualByDay={place.usual_by_day} live={place.live_busyness} today={day} nowHour={hour} />
       </View>
 
       {!fav ? (
         <Pressable style={styles.button} onPress={addFavorite} disabled={saving}>
-          <Text style={styles.buttonText}>☆ Add to favorites</Text>
+          <Text style={styles.buttonText}>{t.addFavorite}</Text>
         </Pressable>
       ) : (
         <View style={styles.card}>
           <View style={styles.rowBetween}>
-            <Text style={styles.cardTitle}>Alert me when it's quiet</Text>
+            <Text style={styles.cardTitle}>{t.alertWhenQuiet}</Text>
             <Switch value={fav.alerts_enabled} onValueChange={(v) => update({ alerts_enabled: v })} />
           </View>
 
-          <Text style={styles.label}>When busyness is under</Text>
-          <Stepper value={fav.threshold} step={10} min={10} max={90} suffix="%"
+          <Text style={styles.label}>{t.whenUnder}</Text>
+          <Stepper value={fav.threshold} step={10} min={10} max={90} suffix={pct}
             onChange={(v) => update({ threshold: v })} />
 
-          <Text style={styles.label}>On these days</Text>
+          <Text style={styles.label}>{t.onDays}</Text>
           <View style={styles.days}>
-            {DAY_LABELS.map((d, i) => {
+            {t.daysLetter.map((d, i) => {
               const on = fav.days.includes(i);
               return (
                 <Pressable key={i} style={[styles.day, on && styles.dayOn]}
@@ -118,19 +120,19 @@ export function PlaceScreen({ placeId, sessionToken, userId, onBack }: Props) {
             })}
           </View>
 
-          <Text style={styles.label}>Between</Text>
+          <Text style={styles.label}>{t.between}</Text>
           <View style={styles.rowBetween}>
-            <Stepper value={fav.start_minute / 60} step={1} min={0} max={23} format={fmtHour}
+            <Stepper value={fav.start_minute / 60} step={1} min={0} max={23} format={(h) => fmtHour(t, h)}
               onChange={(v) => update({ start_minute: v * 60 })} />
-            <Text style={styles.sub}>and</Text>
-            <Stepper value={fav.end_minute / 60} step={1} min={1} max={24} format={fmtHour}
+            <Text style={styles.sub}>{t.and}</Text>
+            <Stepper value={fav.end_minute / 60} step={1} min={1} max={24} format={(h) => fmtHour(t, h)}
               onChange={(v) => update({ end_minute: v * 60 })} />
           </View>
 
-          {notice && <Text style={styles.notice}>{notice}</Text>}
+          {notice && <Text style={styles.notice}>{t[notice]}</Text>}
 
           <Pressable onPress={removeFavorite} style={{ marginTop: 16 }}>
-            <Text style={[styles.link, { color: colors.live }]}>Remove from favorites</Text>
+            <Text style={[styles.link, { color: colors.live }]}>{t.removeFavorite}</Text>
           </Pressable>
         </View>
       )}
@@ -156,11 +158,8 @@ function Stepper(props: {
   );
 }
 
-function fmtHour(h: number) {
-  if (h === 24) return 'Midnight';
-  if (h === 0) return '12 AM';
-  if (h === 12) return '12 PM';
-  return h < 12 ? `${h} AM` : `${h - 12} PM`;
+function fmtHour(t: Strings, h: number) {
+  return h === 24 ? t.midnight : t.hour(h);
 }
 
 const styles = StyleSheet.create({

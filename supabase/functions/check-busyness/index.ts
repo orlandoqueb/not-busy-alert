@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
 
       if (r.live != null) {
         for (const f of placeFavs) {
-          if (shouldAlert(f, r.live, place.timezone)) await alert(f, place, r.live, r.liveLabel);
+          if (shouldAlert(f, r.live, place.timezone)) await alert(f, place, r.live);
         }
       }
       results[placeId] = r.live;
@@ -80,18 +80,38 @@ function shouldAlert(f: any, live: number, tz: string | null) {
   return Date.now() - new Date(f.last_alert_at).getTime() > f.cooldown_min * 60_000;
 }
 
-async function alert(f: any, place: any, live: number, label: string | null) {
-  const { data: tokens } = await supabase.from("push_tokens").select("token").eq("user_id", f.user_id);
+// Alert text in each user's language (stored with their push token).
+const MESSAGES = {
+  fr: {
+    title: (name: string) => `${name} est tranquille en ce moment`,
+    body: (pct: number) => `Achalandage : ${pct} %. C'est le bon moment pour y aller!`,
+  },
+  en: {
+    title: (name: string) => `${name} isn't busy right now`,
+    body: (pct: number) => `${pct}% busy. Good time to go!`,
+  },
+  es: {
+    title: (name: string) => `${name} está tranquilo ahora`,
+    body: (pct: number) => `Afluencia: ${pct}%. ¡Buen momento para ir!`,
+  },
+} as const;
+
+async function alert(f: any, place: any, live: number) {
+  const { data: tokens } = await supabase.from("push_tokens").select("token, locale").eq("user_id", f.user_id);
   if (!tokens?.length) return;
   await fetch("https://exp.host/--/api/v2/push/send", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(tokens.map((t) => ({
-      to: t.token,
-      title: `${place.name} isn't busy right now`,
-      body: `${label ?? "Quiet"} (${live}% busy). Good time to go!`,
-      data: { placeId: place.google_place_id },
-    }))),
+    body: JSON.stringify(tokens.map((t) => {
+      const m = MESSAGES[(t.locale as keyof typeof MESSAGES) ?? "fr"] ?? MESSAGES.fr;
+      return {
+        to: t.token,
+        channelId: "alerts",
+        title: m.title(place.name),
+        body: m.body(live),
+        data: { placeId: place.google_place_id },
+      };
+    })),
   });
   await supabase.from("favorites").update({ last_alert_at: new Date().toISOString() }).eq("id", f.id);
 }

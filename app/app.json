@@ -25,7 +25,8 @@
     },
     "plugins": [
       "expo-web-browser",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-localization"
     ],
     "scheme": "notbusyalert"
   }

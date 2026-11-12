@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { colors } from '../theme';
 
 const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-const SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 type Props = {
   usualByDay: Record<string, { hour: number; score: number }[]> | null;
@@ -14,21 +14,22 @@ type Props = {
 
 // Google-style "Popular times" bar chart, with the live reading shown on the current hour.
 export function BusynessChart({ usualByDay, live, today, nowHour }: Props) {
+  const { t } = useI18n();
   const [day, setDay] = useState(today);
   const hours = usualByDay?.[DAYS[day]] ?? [];
 
   return (
     <View>
       <View style={styles.tabs}>
-        {SHORT.map((d, i) => (
-          <Pressable key={d} onPress={() => setDay(i)} style={[styles.tab, i === day && styles.tabActive]}>
+        {t.daysShort.map((d, i) => (
+          <Pressable key={i} onPress={() => setDay(i)} style={[styles.tab, i === day && styles.tabActive]}>
             <Text style={[styles.tabText, i === day && styles.tabTextActive]}>{d}</Text>
           </Pressable>
         ))}
       </View>
 
       {hours.length === 0 ? (
-        <Text style={styles.empty}>Google has no busyness data for this day.</Text>
+        <Text style={styles.empty}>{t.noDayData}</Text>
       ) : (
         <>
           <View style={styles.chart}>
@@ -54,7 +55,7 @@ export function BusynessChart({ usualByDay, live, today, nowHour }: Props) {
           <View style={styles.axis}>
             {hours.map((h) => (
               <Text key={h.hour} style={styles.axisText}>
-                {h.hour % 3 === 0 ? formatHour(h.hour) : ''}
+                {h.hour % 3 === 0 ? t.hourShort(h.hour) : ''}
               </Text>
             ))}
           </View>
@@ -62,12 +63,6 @@ export function BusynessChart({ usualByDay, live, today, nowHour }: Props) {
       )}
     </View>
   );
-}
-
-function formatHour(h: number) {
-  const suffix = h < 12 ? 'a' : 'p';
-  const n = h % 12 === 0 ? 12 : h % 12;
-  return `${n}${suffix}`;
 }
 
 const styles = StyleSheet.create({
